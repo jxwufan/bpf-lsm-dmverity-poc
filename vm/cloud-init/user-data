@@ -1,0 +1,44 @@
+#cloud-config
+# Cloud-init for the demo VM. Installs build deps, sets the lsm= cmdline,
+# creates a 'demo' user with the host's generated SSH key.
+# `__SSH_PUBKEY__` is replaced by vm/bringup.sh at seed-build time.
+
+ssh_pwauth: false
+disable_root: true
+
+users:
+  - name: demo
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: [sudo]
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - __SSH_PUBKEY__
+
+package_update: true
+packages:
+  - build-essential
+  - clang
+  - llvm
+  - libbpf-dev
+  - linux-tools-common
+  - linux-tools-generic
+  - pkg-config
+  - cryptsetup-bin
+  - dmsetup
+  - gawk
+
+write_files:
+  # Append bpf to lsm= via a grub.d override (Ubuntu cloud images carry a
+  # 50-cloudimg-settings.cfg that resets GRUB_CMDLINE_LINUX_DEFAULT, so
+  # editing /etc/default/grub directly gets clobbered).
+  - path: /etc/default/grub.d/99-bpf-lsm.cfg
+    permissions: '0644'
+    content: |
+      # Include `ipe` so security_bdev_free() actually iterates the LSM hook
+      # chain -- without IPE (or another LSM that allocates a per-bdev blob),
+      # bdev->bd_security stays NULL and bdev_free_security never fires.
+      GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT lsm=lockdown,capability,landlock,yama,apparmor,ipe,bpf"
+
+runcmd:
+  - update-grub
+  - [ sh, -c, '( sleep 5; systemctl reboot ) &' ]

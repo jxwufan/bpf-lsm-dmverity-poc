@@ -1,0 +1,5 @@
+vmlinux.h
+*.bpf.o
+*.skel.h
+observe_loader
+dmverityctl
